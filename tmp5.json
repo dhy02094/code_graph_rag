@@ -1,0 +1,1095 @@
+{
+  "project_path": "C:/Users/kimtaehyeong/workspace/gpu_pod_dashboard",
+  "files": {
+    "src\\main\\java\\com\\example\\gpu_dashboard\\Application.java": {
+      "package": "com.example.gpu_dashboard",
+      "imports": [
+        "org.springframework.boot.SpringApplication",
+        "org.springframework.boot.autoconfigure.SpringBootApplication",
+        "org.springframework.boot.autoconfigure.domain.EntityScan",
+        "org.springframework.data.jpa.repository.config.EnableJpaRepositories",
+        "org.springframework.scheduling.annotation.EnableScheduling"
+      ],
+      "classes": [
+        {
+          "name": "Application",
+          "extends": null,
+          "implements": [],
+          "methods": [
+            {
+              "name": "main",
+              "return_type": null,
+              "parameters": [
+                {
+                  "name": "args",
+                  "type": "String"
+                }
+              ],
+              "documentation": null,
+              "description": "이 메서드는 Spring Boot 애플리케이션을 \"dev\" 프로파일로 설정하고 실행합니다.",
+              "body": "System.setProperty(\"spring.profiles.active\", \"dev\");\n        SpringApplication.run(Application.class, args);"
+            }
+          ],
+          "fields": []
+        }
+      ],
+      "interfaces": [],
+      "path": "C:/Users/kimtaehyeong/workspace/gpu_pod_dashboard\\src\\main\\java\\com\\example\\gpu_dashboard\\Application.java",
+      "dependencies": [
+        {
+          "type": "import",
+          "target": "org.springframework.boot.SpringApplication"
+        },
+        {
+          "type": "import",
+          "target": "org.springframework.boot.autoconfigure.SpringBootApplication"
+        }
+      ]
+    },
+    "src\\main\\java\\com\\example\\gpu_dashboard\\config\\K8sConfig.java": {
+      "package": "com.example.gpu_dashboard.config",
+      "imports": [
+        "io.kubernetes.client.openapi.ApiClient",
+        "io.kubernetes.client.openapi.apis.CoreV1Api",
+        "io.kubernetes.client.util.ClientBuilder",
+        "io.kubernetes.client.util.KubeConfig",
+        "org.springframework.beans.factory.annotation.Value",
+        "org.springframework.context.annotation.Bean",
+        "org.springframework.context.annotation.Configuration",
+        "org.springframework.core.io.ClassPathResource",
+        "java.io.FileReader",
+        "java.io.IOException",
+        "java.io.InputStreamReader"
+      ],
+      "classes": [
+        {
+          "name": "K8sConfig",
+          "extends": null,
+          "implements": [],
+          "methods": [
+            {
+              "name": "coreV1Api",
+              "return_type": "CoreV1Api",
+              "parameters": [],
+              "documentation": null,
+              "description": "이 메서드는 Kubernetes 클러스터에 연결하기 위한 ApiClient를 설정하고, 연결이 실패할 경우 다양한 인증 방법을 시도하여 최종적으로 CoreV1Api 객체를 반환합니다.",
+              "body": "ApiClient client;\n\n        try {\n            client = ClientBuilder.cluster().build();\n            System.out.println(\"Kubernetes 클러스터에 연결되었습니다.\");\n        } catch (Exception e) {\n            System.out.println(\"클러스터 내부 인증 실패, 외부 구성으로 시도합니다: \" + e.getMessage());\n            try {\n                // 클래스패스에서 설정 파일 시도\n                ClassPathResource resource = new ClassPathResource(\"kube_config.yaml\");\n                if (resource.exists()) {\n                    InputStreamReader reader = new InputStreamReader(resource.getInputStream());\n                    client = ClientBuilder.kubeconfig(KubeConfig.loadKubeConfig(reader)).build();\n                    System.out.println(\"클래스패스에서 kube_config.yaml을 로드했습니다.\");\n                } else if (kubeconfigPath != null) {\n                    // 설정된 경로에서 시도\n                    client = ClientBuilder.kubeconfig(KubeConfig.loadKubeConfig(new FileReader(kubeconfigPath))).build();\n                    System.out.println(\"지정된 경로에서 kubeconfig를 로드했습니다: \" + kubeconfigPath);\n                } else {\n                    // 기본 kubeconfig (~/.kube/config) 시도\n                    client = ClientBuilder.defaultClient();\n                    System.out.println(\"기본 kubeconfig를 로드했습니다.\");\n                }\n            } catch (Exception ex) {\n                System.out.println(\"모든 인증 방법 실패, 최후의 방법으로 defaultClient 시도: \" + ex.getMessage());\n                client = io.kubernetes.client.openapi.Configuration.getDefaultApiClient();\n            }\n        }\n        io.kubernetes.client.openapi.Configuration.setDefaultApiClient(client);\n        return new CoreV1Api(client);"
+            }
+          ],
+          "fields": [
+            {
+              "name": "kubeconfigPath",
+              "type": "String"
+            }
+          ]
+        }
+      ],
+      "interfaces": [],
+      "path": "C:/Users/kimtaehyeong/workspace/gpu_pod_dashboard\\src\\main\\java\\com\\example\\gpu_dashboard\\config\\K8sConfig.java",
+      "dependencies": []
+    },
+    "src\\main\\java\\com\\example\\gpu_dashboard\\config\\SchedulerConfig.java": {
+      "package": "com.example.gpu_dashboard.config",
+      "imports": [
+        "com.example.gpu_dashboard.service.PodService",
+        "org.slf4j.Logger",
+        "org.slf4j.LoggerFactory",
+        "org.springframework.beans.factory.annotation.Autowired",
+        "org.springframework.context.annotation.Configuration",
+        "org.springframework.scheduling.annotation.EnableScheduling",
+        "org.springframework.scheduling.annotation.Scheduled",
+        "java.util.Arrays",
+        "java.util.List"
+      ],
+      "classes": [
+        {
+          "name": "SchedulerConfig",
+          "extends": null,
+          "implements": [],
+          "methods": [
+            {
+              "name": "updatePodInfo",
+              "return_type": null,
+              "parameters": [],
+              "documentation": null,
+              "description": "`updatePodInfo` 메서드는 모니터링 중인 네임스페이스 각각에 대해 포드 정보를 업데이트하고, 성공 여부를 로깅하는 작업을 수행합니다.",
+              "body": "logger.info(\"Scheduled pod info update started\");\n        \n        for (String namespace : monitoredNamespaces) {\n            try {\n                // podService.listAndSavePods(namespace, null);\n                podService.listPods(namespace);\n                logger.debug(\"Updated pod info for namespace: {}\", namespace);\n            } catch (Exception e) {\n                logger.error(\"Failed to update pod info for namespace {}: {}\", namespace, e.getMessage());\n            }\n        }\n        \n        logger.info(\"Scheduled pod info update completed\");"
+            }
+          ],
+          "fields": [
+            {
+              "name": "logger",
+              "type": "Logger"
+            },
+            {
+              "name": "podService",
+              "type": "PodService"
+            },
+            {
+              "name": "monitoredNamespaces",
+              "type": "List"
+            }
+          ]
+        }
+      ],
+      "interfaces": [],
+      "path": "C:/Users/kimtaehyeong/workspace/gpu_pod_dashboard\\src\\main\\java\\com\\example\\gpu_dashboard\\config\\SchedulerConfig.java",
+      "dependencies": [
+        {
+          "type": "import",
+          "target": "com.example.gpu_dashboard.service.PodService",
+          "file": "src\\main\\java\\com\\example\\gpu_dashboard\\service\\PodService.java"
+        }
+      ]
+    },
+    "src\\main\\java\\com\\example\\gpu_dashboard\\controller\\PodController.java": {
+      "package": "com.example.gpu_dashboard.controller",
+      "imports": [
+        "com.example.gpu_dashboard.dto.DeletePodRequest",
+        "com.example.gpu_dashboard.dto.DeletePodResponseDto",
+        "com.example.gpu_dashboard.dto.NamespaceDto",
+        "com.example.gpu_dashboard.dto.PodResponseDto",
+        "com.example.gpu_dashboard.dto.PodUpdateUserDto",
+        "com.example.gpu_dashboard.service.PodService",
+        "org.slf4j.Logger",
+        "org.slf4j.LoggerFactory",
+        "org.springframework.beans.factory.annotation.Autowired",
+        "org.springframework.web.bind.annotation.PostMapping",
+        "org.springframework.web.bind.annotation.RequestBody",
+        "org.springframework.web.bind.annotation.RestController",
+        "java.util.Collections"
+      ],
+      "classes": [
+        {
+          "name": "PodController",
+          "extends": null,
+          "implements": [],
+          "methods": [
+            {
+              "name": "getPods",
+              "return_type": "PodResponseDto",
+              "parameters": [
+                {
+                  "name": "request",
+                  "type": "NamespaceDto"
+                }
+              ],
+              "documentation": "/**\n     * 특정 네임스페이스의 Pod 목록을 조회하고 DB에 저장\n     * @param request 네임스페이스 정보를 담은 DTO\n     * @return Pod 정보 목록을 담은 응답 DTO\n     */",
+              "description": "`getPods` 메서드는 주어진 네임스페이스 정보를 사용하여 해당 네임스페이스의 Pod 목록을 조회하고, 조회 중 오류가 발생하면 빈 목록을 반환하는 응답 DTO를 반환합니다.",
+              "body": "try {\n            String namespace = request.getNamespace();\n            logger.debug(\"Received namespace request: {}\", namespace);\n            return podService.listPods(namespace);\n        } catch (Exception e) {\n            logger.error(\"Error getting pods: \", e);\n            return new PodResponseDto(Collections.emptyList());\n        }"
+            },
+            {
+              "name": "getPodsFromDb",
+              "return_type": "PodResponseDto",
+              "parameters": [
+                {
+                  "name": "request",
+                  "type": "NamespaceDto"
+                }
+              ],
+              "documentation": "/**\n     * 특정 네임스페이스의 Pod 목록을 DB에서 조회\n     * @param request 네임스페이스 정보를 담은 DTO\n     * @return Pod 정보 목록을 담은 응답 DTO\n     */",
+              "description": "`getPodsFromDb` 메서드는 주어진 네임스페이스 정보를 기반으로 데이터베이스에서 해당 네임스페이스의 Pod 목록을 조회하여 반환하며, 조회 중 오류가 발생하면 빈 Pod 목록을 반환합니다.",
+              "body": "try {\n            String namespace = request.getNamespace();\n            logger.debug(\"Received DB query request for namespace: {}\", namespace);\n            return podService.getPodsFromDb(namespace);\n        } catch (Exception e) {\n            logger.error(\"Error getting pods from DB: \", e);\n            return new PodResponseDto(Collections.emptyList());\n        }"
+            },
+            {
+              "name": "deletePod",
+              "return_type": "DeletePodResponseDto",
+              "parameters": [
+                {
+                  "name": "request",
+                  "type": "DeletePodRequest"
+                }
+              ],
+              "documentation": "/**\n     * 특정 네임스페이스의 Pod를 삭제\n     * @param request Pod 삭제 요청 정보를 담은 DTO (네임스페이스와 Pod 이름 포함)\n     * @return Pod 삭제 결과를 담은 응답 DTO (성공 시 \"success\", 실패 시 \"fail\" 반환)\n     */",
+              "description": "`deletePod` 메서드는 주어진 네임스페이스와 Pod 이름을 기반으로 Pod 삭제를 시도하고, 성공 여부에 따라 \"success\" 또는 \"fail\"을 반환하는 응답 DTO를 반환합니다.",
+              "body": "try {\n            logger.debug(\"Pod 삭제 요청 - namespace: {}, podName: {}\", \n                request.getNamespace(), request.getPodName());\n            return podService.deletePod(request.getNamespace(), request.getPodName());\n        } catch (Exception e) {\n            logger.error(\"Pod 삭제 중 오류 발생: \", e);\n            return new DeletePodResponseDto(\"fail\");\n        }"
+            },
+            {
+              "name": "updatePod",
+              "return_type": "PodResponseDto",
+              "parameters": [
+                {
+                  "name": "request",
+                  "type": "PodUpdateUserDto"
+                }
+              ],
+              "documentation": null,
+              "description": "`updatePod` 메서드는 주어진 네임스페이스와 포드 이름에 해당하는 포드의 사용자 이름을 업데이트하고, 이 요청에 대한 디버그 로그를 기록합니다.",
+              "body": "logger.debug(\"Pod 사용자 이름 업데이트 요청 - namespace: {}, podName: {}, username: {}\", \n            request.getNamespace(), request.getPodname(), request.getUsername());\n        return podService.updateUsername(request.getNamespace(), request.getPodname(), request.getUsername());"
+            }
+          ],
+          "fields": [
+            {
+              "name": "podService",
+              "type": "PodService"
+            },
+            {
+              "name": "logger",
+              "type": "Logger"
+            }
+          ]
+        }
+      ],
+      "interfaces": [],
+      "path": "C:/Users/kimtaehyeong/workspace/gpu_pod_dashboard\\src\\main\\java\\com\\example\\gpu_dashboard\\controller\\PodController.java",
+      "dependencies": [
+        {
+          "type": "import",
+          "target": "com.example.gpu_dashboard.dto.DeletePodRequest",
+          "file": "src\\main\\java\\com\\example\\gpu_dashboard\\dto\\DeletePodRequest.java"
+        },
+        {
+          "type": "import",
+          "target": "com.example.gpu_dashboard.dto.DeletePodResponseDto",
+          "file": "src\\main\\java\\com\\example\\gpu_dashboard\\dto\\DeletePodResponseDto.java"
+        },
+        {
+          "type": "import",
+          "target": "com.example.gpu_dashboard.dto.NamespaceDto",
+          "file": "src\\main\\java\\com\\example\\gpu_dashboard\\dto\\NamespaceDto.java"
+        },
+        {
+          "type": "import",
+          "target": "com.example.gpu_dashboard.dto.PodResponseDto",
+          "file": "src\\main\\java\\com\\example\\gpu_dashboard\\dto\\PodResponseDto.java"
+        },
+        {
+          "type": "import",
+          "target": "com.example.gpu_dashboard.dto.PodUpdateUserDto",
+          "file": "src\\main\\java\\com\\example\\gpu_dashboard\\dto\\PodUpdateUserDto.java"
+        },
+        {
+          "type": "import",
+          "target": "com.example.gpu_dashboard.service.PodService",
+          "file": "src\\main\\java\\com\\example\\gpu_dashboard\\service\\PodService.java"
+        }
+      ]
+    },
+    "src\\main\\java\\com\\example\\gpu_dashboard\\dto\\DeletePodRequest.java": {
+      "package": "com.example.gpu_dashboard.dto",
+      "imports": [],
+      "classes": [
+        {
+          "name": "DeletePodRequest",
+          "extends": null,
+          "implements": [],
+          "methods": [
+            {
+              "name": "getNamespace",
+              "return_type": "String",
+              "parameters": [],
+              "documentation": null,
+              "description": "`getNamespace` 메서드는 `namespace`라는 변수의 값을 반환합니다.",
+              "body": "return namespace;"
+            },
+            {
+              "name": "setNamespace",
+              "return_type": null,
+              "parameters": [
+                {
+                  "name": "namespace",
+                  "type": "String"
+                }
+              ],
+              "documentation": null,
+              "description": "`setNamespace` 메서드는 인자로 전달된 값을 객체의 `namespace` 필드에 할당합니다.",
+              "body": "this.namespace = namespace;"
+            },
+            {
+              "name": "getPodName",
+              "return_type": "String",
+              "parameters": [],
+              "documentation": null,
+              "description": "`getPodName` 메서드는 `podName`이라는 변수의 값을 반환합니다.",
+              "body": "return podName;"
+            },
+            {
+              "name": "setPodName",
+              "return_type": null,
+              "parameters": [
+                {
+                  "name": "podName",
+                  "type": "String"
+                }
+              ],
+              "documentation": null,
+              "description": "`setPodName` 메서드는 인자로 전달된 `podName` 값을 객체의 `podName` 필드에 설정합니다.",
+              "body": "this.podName = podName;"
+            }
+          ],
+          "fields": [
+            {
+              "name": "namespace",
+              "type": "String"
+            },
+            {
+              "name": "podName",
+              "type": "String"
+            }
+          ]
+        }
+      ],
+      "interfaces": [],
+      "path": "C:/Users/kimtaehyeong/workspace/gpu_pod_dashboard\\src\\main\\java\\com\\example\\gpu_dashboard\\dto\\DeletePodRequest.java",
+      "dependencies": []
+    },
+    "src\\main\\java\\com\\example\\gpu_dashboard\\dto\\DeletePodResponseDto.java": {
+      "package": "com.example.gpu_dashboard.dto",
+      "imports": [],
+      "classes": [
+        {
+          "name": "DeletePodResponseDto",
+          "extends": null,
+          "implements": [],
+          "methods": [
+            {
+              "name": "getStatus",
+              "return_type": "String",
+              "parameters": [],
+              "documentation": null,
+              "description": "`getStatus` 메서드는 `status`라는 변수의 현재 값을 반환합니다.",
+              "body": "return status;"
+            }
+          ],
+          "fields": [
+            {
+              "name": "status",
+              "type": "String"
+            }
+          ]
+        }
+      ],
+      "interfaces": [],
+      "path": "C:/Users/kimtaehyeong/workspace/gpu_pod_dashboard\\src\\main\\java\\com\\example\\gpu_dashboard\\dto\\DeletePodResponseDto.java",
+      "dependencies": []
+    },
+    "src\\main\\java\\com\\example\\gpu_dashboard\\dto\\NamespaceDto.java": {
+      "package": "com.example.gpu_dashboard.dto",
+      "imports": [],
+      "classes": [
+        {
+          "name": "NamespaceDto",
+          "extends": null,
+          "implements": [],
+          "methods": [
+            {
+              "name": "getNamespace",
+              "return_type": "String",
+              "parameters": [],
+              "documentation": null,
+              "description": "`getNamespace` 메서드는 `namespace`라는 변수의 값을 반환합니다.",
+              "body": "return namespace;"
+            },
+            {
+              "name": "setNamespace",
+              "return_type": null,
+              "parameters": [
+                {
+                  "name": "namespace",
+                  "type": "String"
+                }
+              ],
+              "documentation": null,
+              "description": "`setNamespace` 메서드는 인스턴스 변수 `namespace`에 전달된 매개변수 `namespace`의 값을 할당합니다.",
+              "body": "this.namespace = namespace;"
+            }
+          ],
+          "fields": [
+            {
+              "name": "namespace",
+              "type": "String"
+            }
+          ]
+        }
+      ],
+      "interfaces": [],
+      "path": "C:/Users/kimtaehyeong/workspace/gpu_pod_dashboard\\src\\main\\java\\com\\example\\gpu_dashboard\\dto\\NamespaceDto.java",
+      "dependencies": []
+    },
+    "src\\main\\java\\com\\example\\gpu_dashboard\\dto\\PodInfoDto.java": {
+      "package": "com.example.gpu_dashboard.dto",
+      "imports": [],
+      "classes": [
+        {
+          "name": "PodInfoDto",
+          "extends": null,
+          "implements": [],
+          "methods": [
+            {
+              "name": "getNamespace",
+              "return_type": "String",
+              "parameters": [],
+              "documentation": null,
+              "description": "`getNamespace` 메서드는 `namespace`라는 변수의 값을 반환합니다.",
+              "body": "return namespace;"
+            },
+            {
+              "name": "getPodname",
+              "return_type": "String",
+              "parameters": [],
+              "documentation": null,
+              "description": "`getPodname` 메서드는 `podname`이라는 변수를 반환합니다.",
+              "body": "return podname;"
+            },
+            {
+              "name": "getPodstatus",
+              "return_type": "String",
+              "parameters": [],
+              "documentation": null,
+              "description": "`getPodstatus` 메서드는 `podstatus`라는 변수를 반환합니다.",
+              "body": "return podstatus;"
+            },
+            {
+              "name": "getGpuDevices",
+              "return_type": "String",
+              "parameters": [],
+              "documentation": null,
+              "description": "`getGpuDevices` 메서드는 `gpuDevices` 객체를 반환합니다.",
+              "body": "return gpuDevices;"
+            },
+            {
+              "name": "getUsername",
+              "return_type": "String",
+              "parameters": [],
+              "documentation": null,
+              "description": "`getUsername` 메서드는 `username`이라는 변수의 값을 반환합니다.",
+              "body": "return username;"
+            },
+            {
+              "name": "getPoduptime",
+              "return_type": "String",
+              "parameters": [],
+              "documentation": null,
+              "description": "`getPoduptime` 메서드는 `poduptime` 변수를 반환합니다.",
+              "body": "return poduptime;"
+            }
+          ],
+          "fields": [
+            {
+              "name": "namespace",
+              "type": "String"
+            },
+            {
+              "name": "podname",
+              "type": "String"
+            },
+            {
+              "name": "podstatus",
+              "type": "String"
+            },
+            {
+              "name": "poduptime",
+              "type": "String"
+            },
+            {
+              "name": "gpuDevices",
+              "type": "String"
+            },
+            {
+              "name": "username",
+              "type": "String"
+            }
+          ]
+        }
+      ],
+      "interfaces": [],
+      "path": "C:/Users/kimtaehyeong/workspace/gpu_pod_dashboard\\src\\main\\java\\com\\example\\gpu_dashboard\\dto\\PodInfoDto.java",
+      "dependencies": []
+    },
+    "src\\main\\java\\com\\example\\gpu_dashboard\\dto\\PodResponseDto.java": {
+      "package": "com.example.gpu_dashboard.dto",
+      "imports": [
+        "java.util.List"
+      ],
+      "classes": [
+        {
+          "name": "PodResponseDto",
+          "extends": null,
+          "implements": [],
+          "methods": [
+            {
+              "name": "getResult",
+              "return_type": "List",
+              "parameters": [],
+              "documentation": null,
+              "description": "메서드 `getResult`는 `result`라는 변수의 값을 반환합니다.",
+              "body": "return result;"
+            }
+          ],
+          "fields": [
+            {
+              "name": "result",
+              "type": "List"
+            }
+          ]
+        }
+      ],
+      "interfaces": [],
+      "path": "C:/Users/kimtaehyeong/workspace/gpu_pod_dashboard\\src\\main\\java\\com\\example\\gpu_dashboard\\dto\\PodResponseDto.java",
+      "dependencies": []
+    },
+    "src\\main\\java\\com\\example\\gpu_dashboard\\dto\\PodUpdateUserDto.java": {
+      "package": "com.example.gpu_dashboard.dto",
+      "imports": [],
+      "classes": [
+        {
+          "name": "PodUpdateUserDto",
+          "extends": null,
+          "implements": [],
+          "methods": [
+            {
+              "name": "getNamespace",
+              "return_type": "String",
+              "parameters": [],
+              "documentation": null,
+              "description": "`getNamespace` 메서드는 `namespace`라는 변수의 값을 반환합니다.",
+              "body": "return namespace;"
+            },
+            {
+              "name": "setNamespace",
+              "return_type": null,
+              "parameters": [
+                {
+                  "name": "namespace",
+                  "type": "String"
+                }
+              ],
+              "documentation": null,
+              "description": "`setNamespace` 메서드는 인스턴스 변수 `namespace`의 값을 매개변수로 전달된 `namespace` 값으로 설정합니다.",
+              "body": "this.namespace = namespace;"
+            },
+            {
+              "name": "getPodname",
+              "return_type": "String",
+              "parameters": [],
+              "documentation": null,
+              "description": "`getPodname` 메서드는 `podname`이라는 변수를 반환합니다.",
+              "body": "return podname;"
+            },
+            {
+              "name": "setPodname",
+              "return_type": null,
+              "parameters": [
+                {
+                  "name": "podname",
+                  "type": "String"
+                }
+              ],
+              "documentation": null,
+              "description": "`setPodname` 메서드는 인스턴스 변수 `podname`의 값을 매개변수로 전달된 `podname` 값으로 설정합니다.",
+              "body": "this.podname = podname;"
+            },
+            {
+              "name": "getUsername",
+              "return_type": "String",
+              "parameters": [],
+              "documentation": null,
+              "description": "`getUsername` 메서드는 `username`이라는 변수의 값을 반환합니다.",
+              "body": "return username;"
+            },
+            {
+              "name": "setUsername",
+              "return_type": null,
+              "parameters": [
+                {
+                  "name": "username",
+                  "type": "String"
+                }
+              ],
+              "documentation": null,
+              "description": "`setUsername` 메서드는 객체의 `username` 필드를 주어진 `username` 값으로 설정합니다.",
+              "body": "this.username = username;"
+            }
+          ],
+          "fields": [
+            {
+              "name": "namespace",
+              "type": "String"
+            },
+            {
+              "name": "podname",
+              "type": "String"
+            },
+            {
+              "name": "username",
+              "type": "String"
+            }
+          ]
+        }
+      ],
+      "interfaces": [],
+      "path": "C:/Users/kimtaehyeong/workspace/gpu_pod_dashboard\\src\\main\\java\\com\\example\\gpu_dashboard\\dto\\PodUpdateUserDto.java",
+      "dependencies": []
+    },
+    "src\\main\\java\\com\\example\\gpu_dashboard\\entity\\PodInfoEntity.java": {
+      "package": "com.example.gpu_dashboard.entity",
+      "imports": [
+        "jakarta.persistence",
+        "java.time.LocalDateTime"
+      ],
+      "classes": [
+        {
+          "name": "PodInfoEntity",
+          "extends": null,
+          "implements": [],
+          "methods": [
+            {
+              "name": "getId",
+              "return_type": "Long",
+              "parameters": [],
+              "documentation": null,
+              "description": "`getId` 메서드는 객체의 `id` 필드 값을 반환합니다.",
+              "body": "return id;"
+            },
+            {
+              "name": "setId",
+              "return_type": null,
+              "parameters": [
+                {
+                  "name": "id",
+                  "type": "Long"
+                }
+              ],
+              "documentation": null,
+              "description": "`setId` 메서드는 객체의 `id` 필드를 전달된 매개변수 값으로 설정합니다.",
+              "body": "this.id = id;"
+            },
+            {
+              "name": "getUsername",
+              "return_type": "String",
+              "parameters": [],
+              "documentation": null,
+              "description": "`getUsername` 메서드는 `username`이라는 변수의 값을 반환합니다.",
+              "body": "return username;"
+            },
+            {
+              "name": "setUsername",
+              "return_type": null,
+              "parameters": [
+                {
+                  "name": "username",
+                  "type": "String"
+                }
+              ],
+              "documentation": null,
+              "description": "`setUsername` 메서드는 객체의 `username` 필드를 전달된 `username` 값으로 설정합니다.",
+              "body": "this.username = username;"
+            },
+            {
+              "name": "getNamespace",
+              "return_type": "String",
+              "parameters": [],
+              "documentation": null,
+              "description": "`getNamespace` 메서드는 `namespace`라는 변수의 값을 반환합니다.",
+              "body": "return namespace;"
+            },
+            {
+              "name": "setNamespace",
+              "return_type": null,
+              "parameters": [
+                {
+                  "name": "namespace",
+                  "type": "String"
+                }
+              ],
+              "documentation": null,
+              "description": "`setNamespace` 메서드는 객체의 `namespace` 필드를 주어진 `namespace` 값으로 설정합니다.",
+              "body": "this.namespace = namespace;"
+            },
+            {
+              "name": "getPodName",
+              "return_type": "String",
+              "parameters": [],
+              "documentation": null,
+              "description": "`getPodName` 메서드는 `podName`이라는 변수의 값을 반환합니다.",
+              "body": "return podName;"
+            },
+            {
+              "name": "setPodName",
+              "return_type": null,
+              "parameters": [
+                {
+                  "name": "podName",
+                  "type": "String"
+                }
+              ],
+              "documentation": null,
+              "description": "`setPodName` 메서드는 인자로 전달된 `podName` 값을 객체의 `podName` 필드에 설정합니다.",
+              "body": "this.podName = podName;"
+            },
+            {
+              "name": "getPodStatus",
+              "return_type": "String",
+              "parameters": [],
+              "documentation": null,
+              "description": "`getPodStatus` 메서드는 `podStatus` 값을 반환합니다.",
+              "body": "return podStatus;"
+            },
+            {
+              "name": "setPodStatus",
+              "return_type": null,
+              "parameters": [
+                {
+                  "name": "podStatus",
+                  "type": "String"
+                }
+              ],
+              "documentation": null,
+              "description": "`setPodStatus` 메서드는 인스턴스 변수 `podStatus`를 주어진 `podStatus` 값으로 설정합니다.",
+              "body": "this.podStatus = podStatus;"
+            },
+            {
+              "name": "getGpuDevices",
+              "return_type": "String",
+              "parameters": [],
+              "documentation": null,
+              "description": "`getGpuDevices` 메서드는 `gpuDevices` 객체를 반환합니다.",
+              "body": "return gpuDevices;"
+            },
+            {
+              "name": "setGpuDevices",
+              "return_type": null,
+              "parameters": [
+                {
+                  "name": "gpuDevices",
+                  "type": "String"
+                }
+              ],
+              "documentation": null,
+              "description": "`setGpuDevices` 메서드는 인스턴스 변수 `gpuDevices`를 매개변수로 전달된 `gpuDevices` 값으로 설정합니다.",
+              "body": "this.gpuDevices = gpuDevices;"
+            },
+            {
+              "name": "getStartDateTime",
+              "return_type": "LocalDateTime",
+              "parameters": [],
+              "documentation": null,
+              "description": "`getStartDateTime` 메서드는 `startDateTime`이라는 변수를 반환합니다.",
+              "body": "return startDateTime;"
+            },
+            {
+              "name": "setStartDateTime",
+              "return_type": null,
+              "parameters": [
+                {
+                  "name": "startDateTime",
+                  "type": "LocalDateTime"
+                }
+              ],
+              "documentation": null,
+              "description": "`setStartDateTime` 메서드는 객체의 `startDateTime` 필드를 주어진 `startDateTime` 값으로 설정합니다.",
+              "body": "this.startDateTime = startDateTime;"
+            },
+            {
+              "name": "getPodUptime",
+              "return_type": "String",
+              "parameters": [],
+              "documentation": null,
+              "description": "`getPodUptime` 메서드는 `podUptime` 값을 반환합니다.",
+              "body": "return podUptime;"
+            },
+            {
+              "name": "setPodUptime",
+              "return_type": null,
+              "parameters": [
+                {
+                  "name": "podUptime",
+                  "type": "String"
+                }
+              ],
+              "documentation": null,
+              "description": "`setPodUptime` 메서드는 `podUptime` 값을 인스턴스 변수 `podUptime`에 설정합니다.",
+              "body": "this.podUptime = podUptime;"
+            }
+          ],
+          "fields": [
+            {
+              "name": "id",
+              "type": "Long"
+            },
+            {
+              "name": "username",
+              "type": "String"
+            },
+            {
+              "name": "namespace",
+              "type": "String"
+            },
+            {
+              "name": "podName",
+              "type": "String"
+            },
+            {
+              "name": "podStatus",
+              "type": "String"
+            },
+            {
+              "name": "gpuDevices",
+              "type": "String"
+            },
+            {
+              "name": "podUptime",
+              "type": "String"
+            },
+            {
+              "name": "startDateTime",
+              "type": "LocalDateTime"
+            }
+          ]
+        }
+      ],
+      "interfaces": [],
+      "path": "C:/Users/kimtaehyeong/workspace/gpu_pod_dashboard\\src\\main\\java\\com\\example\\gpu_dashboard\\entity\\PodInfoEntity.java",
+      "dependencies": []
+    },
+    "src\\main\\java\\com\\example\\gpu_dashboard\\repository\\PodInfoRepository.java": {
+      "package": "com.example.gpu_dashboard.repository",
+      "imports": [
+        "com.example.gpu_dashboard.entity.PodInfoEntity",
+        "java.util.List",
+        "java.util.Optional",
+        "org.springframework.data.jpa.repository.JpaRepository"
+      ],
+      "classes": [],
+      "interfaces": [
+        {
+          "name": "PodInfoRepository",
+          "extends": [
+            "JpaRepository"
+          ],
+          "methods": [
+            {
+              "name": "findByNamespace",
+              "return_type": "List",
+              "parameters": [
+                {
+                  "name": "namespace",
+                  "type": "String"
+                }
+              ],
+              "documentation": null,
+              "description": "`findByNamespace` 메서드는 주어진 네임스페이스를 기준으로 특정 객체나 데이터를 검색하는 기능을 수행할 것으로 예상됩니다.",
+              "body": ""
+            },
+            {
+              "name": "findByNamespaceAndPodName",
+              "return_type": "Optional",
+              "parameters": [
+                {
+                  "name": "namespace",
+                  "type": "String"
+                },
+                {
+                  "name": "podName",
+                  "type": "String"
+                }
+              ],
+              "documentation": null,
+              "description": "`findByNamespaceAndPodName` 메서드는 주어진 네임스페이스와 포드 이름을 기준으로 특정 객체나 정보를 검색하는 기능을 수행할 것으로 추측됩니다.",
+              "body": ""
+            }
+          ]
+        }
+      ],
+      "path": "C:/Users/kimtaehyeong/workspace/gpu_pod_dashboard\\src\\main\\java\\com\\example\\gpu_dashboard\\repository\\PodInfoRepository.java",
+      "dependencies": [
+        {
+          "type": "import",
+          "target": "com.example.gpu_dashboard.entity.PodInfoEntity",
+          "file": "src\\main\\java\\com\\example\\gpu_dashboard\\entity\\PodInfoEntity.java"
+        }
+      ]
+    },
+    "src\\main\\java\\com\\example\\gpu_dashboard\\service\\PodService.java": {
+      "package": "com.example.gpu_dashboard.service",
+      "imports": [
+        "org.slf4j.Logger",
+        "org.slf4j.LoggerFactory",
+        "io.kubernetes.client.openapi.apis.CoreV1Api",
+        "io.kubernetes.client.openapi.models.V1PodList",
+        "org.springframework.beans.factory.annotation.Autowired",
+        "org.springframework.stereotype.Service",
+        "java.time.Duration",
+        "java.time.OffsetDateTime",
+        "java.time.ZoneId",
+        "java.time.ZonedDateTime",
+        "java.util.List",
+        "java.util.Optional",
+        "java.util.Set",
+        "java.util.stream.Collectors",
+        "java.util.Collections",
+        "com.example.gpu_dashboard.dto.DeletePodResponseDto",
+        "com.example.gpu_dashboard.dto.PodInfoDto",
+        "com.example.gpu_dashboard.dto.PodResponseDto",
+        "com.example.gpu_dashboard.repository.PodInfoRepository",
+        "com.example.gpu_dashboard.entity.PodInfoEntity"
+      ],
+      "classes": [
+        {
+          "name": "PodService",
+          "extends": null,
+          "implements": [],
+          "methods": [
+            {
+              "name": "savePodInfo",
+              "return_type": null,
+              "parameters": [
+                {
+                  "name": "namespace",
+                  "type": "String"
+                },
+                {
+                  "name": "podName",
+                  "type": "String"
+                },
+                {
+                  "name": "podStatus",
+                  "type": "String"
+                },
+                {
+                  "name": "podUptime",
+                  "type": "String"
+                },
+                {
+                  "name": "gpuDevices",
+                  "type": "String"
+                }
+              ],
+              "documentation": "/**\n     * Pod 정보를 DB에 저장\n     * @param namespace 네임스페이스\n     * @param podName Pod 이름\n     * @param podStatus Pod 상태\n     * @param podUptime Pod 가동 시간\n     * @param gpuDevices GPU 장치 정보\n     */",
+              "description": "`savePodInfo` 메서드는 주어진 네임스페이스와 Pod 이름을 기반으로 Pod 정보를 데이터베이스에 저장하거나 업데이트합니다.",
+              "body": "try {\n            // 기존 Pod 정보 조회 (namespace와 podName으로 식별)\n            List<PodInfoEntity> existingPods = podInfoRepository.findByNamespace(namespace);\n            PodInfoEntity existingPod = null;\n            \n            for (PodInfoEntity pod : existingPods) {\n                if (pod.getPodName().equals(podName)) {\n                    existingPod = pod;\n                    break;\n                }\n            }\n            \n            if (existingPod != null) {\n                // 기존 정보 업데이트\n                existingPod.setPodStatus(podStatus);\n                existingPod.setPodUptime(podUptime);\n                existingPod.setGpuDevices(gpuDevices);\n                podInfoRepository.save(existingPod);\n                logger.debug(\"Updated pod info in DB: {}/{}\", namespace, podName);\n            } else {\n                // 새 정보 생성\n                PodInfoEntity newPod = new PodInfoEntity();\n                newPod.setNamespace(namespace);\n                newPod.setPodName(podName);\n                newPod.setPodStatus(podStatus);\n                newPod.setPodUptime(podUptime);\n                newPod.setGpuDevices(gpuDevices);\n                podInfoRepository.save(newPod);\n                logger.debug(\"Saved new pod info to DB: {}/{}\", namespace, podName);\n            }\n        } catch (Exception e) {\n            logger.error(\"Failed to save pod info to DB: {}\", e.getMessage(), e);\n        }"
+            },
+            {
+              "name": "listPods",
+              "return_type": "PodResponseDto",
+              "parameters": [
+                {
+                  "name": "namespace",
+                  "type": "String"
+                }
+              ],
+              "documentation": "/**\n     * 특정 네임스페이스의 모든 Pod 목록을 조회\n     * @param namespace 조회할 네임스페이스\n     * @return PodResponseDto Pod 정보 목록을 포함한 응답 객체\n     * @throws Exception API 호출 실패시 발생\n     */",
+              "description": "이 메서드는 주어진 네임스페이스의 모든 쿠버네티스 Pod 목록을 조회하고, 해당 정보를 데이터베이스와 동기화하여 최신 상태를 반영한 후, Pod 정보 목록을 포함한 응답 객체를 반환합니다.",
+              "body": "try {\n            logger.debug(\"Attempting to list pods in namespace: {}\", namespace);\n            V1PodList podList = coreV1Api.listNamespacedPod(\n                namespace != null ? namespace.trim() : \"\",\n                null, null, null, null, null, null, null, null, null, false\n            );\n            // 한국 시간대(KST)로 현재 시간 설정\n            ZoneId koreaZoneId = ZoneId.of(\"Asia/Seoul\");\n            ZonedDateTime koreaTime = ZonedDateTime.now(koreaZoneId);\n            OffsetDateTime now = koreaTime.toOffsetDateTime();\n            logger.debug(\"Current time (KST): {}\", koreaTime);\n\n            // 현재 쿠버네티스에 존재하는 Pod 이름들을 Set으로 수집\n            Set<String> currentPodNames = podList.getItems().stream()\n                .map(pod -> pod.getMetadata().getName())\n                .collect(Collectors.toSet());\n            logger.debug(\"Current pod names: {}\", currentPodNames);\n\n            // DB에서 해당 네임스페이스의 모든 Pod 조회\n            List<PodInfoEntity> dbPods = podInfoRepository.findByNamespace(namespace);\n\n            // 현재 쿠버네티스에 없는 Pod는 DB에서 삭제\n            for (PodInfoEntity dbPod : dbPods) {\n                if (!currentPodNames.contains(dbPod.getPodName())) {\n                    podInfoRepository.delete(dbPod);\n                    logger.debug(\"Deleted pod from DB: {}/{}\", namespace, dbPod.getPodName());\n                }\n            }\n\n\n            List<PodInfoDto> podInfos = podList.getItems().stream()\n                .map(pod -> {\n                    String poduptime = \"\";\n                    if (pod.getStatus() != null) {\n                        OffsetDateTime startTime = pod.getStatus().getStartTime();\n                        if (startTime != null) {\n                            Duration duration = Duration.between(startTime, now);\n                            long days = duration.toDays();\n                            long hours = duration.toHours() % 24;\n                            poduptime = String.format(\"%dd %dh\", days, hours);\n                        }\n                    }\n                    \n                    String podName = (pod.getMetadata() != null) ? pod.getMetadata().getName() : \"unknown\";\n                    String podPhase = (pod.getStatus() != null) ? pod.getStatus().getPhase() : \"unknown\";\n                    // 각 container의 \"CUDA_VISIBLE_DEVICES\" 환경변수를 확인하여 GPU 장비번호를 가져옴\n                    String gpuDevices = \"\";\n                    // logger.debug(\"PodSpec: {}\", pod.getSpec());\n                    if (pod.getSpec() != null && pod.getSpec().getContainers() != null) {\n                        gpuDevices = pod.getSpec().getContainers().stream()\n                            .map(container -> {\n                                String device = \"Not GPU\";\n                                if (container.getEnv() != null) {\n                                    device = container.getEnv().stream()\n                                              .filter(envVar -> \"NVIDIA_VISIBLE_DEVICES\".equals(envVar.getName()))\n                                              .map(envVar -> envVar.getValue())\n                                              .findFirst().orElse(\"Not GPU\");\n                                }\n                                return device;\n                            })\n                            .collect(Collectors.joining(\", \"));\n                    }\n\n                    savePodInfo(namespace, podName, podPhase, poduptime, gpuDevices);\n\n                    String username = \"\";\n\n                    return new PodInfoDto(namespace, podName, podPhase, poduptime, gpuDevices, username);\n                })\n                .collect(Collectors.toList());\n                \n\n            // // // 이상한 Pod 처리 - DB에는 있지만 쿠버네티스에는 없는 Pod\n            // List<PodInfoEntity> dbPods = podInfoRepository.findByNamespace(namespace);\n            // for (PodInfoEntity pod : dbPods) {\n            //     if (!currentPodNames.contains(pod.getPodName())) {\n            //         // 방법 1: 상태만 변경\n            //         pod.setPodStatus(\"Deleted\");\n            //         podInfoRepository.save(pod);\n            //         logger.debug(\"Pod가 삭제됨, 상태 업데이트: {}/{}\", namespace, pod.getPodName());\n                    \n            //         // 방법 2: DB에서 완전히 삭제 (원하는 경우)\n            //         // podInfoRepository.delete(pod);\n            //         // logger.debug(\"Pod가 삭제됨, DB에서 제거: {}/{}\", namespace, pod.getPodName());\n            //     }\n            // }\n\n            return new PodResponseDto(podInfos);\n            \n        } catch (Exception e) {\n            logger.error(\"Failed to list pods in namespace '{}': {}\", namespace, e.getMessage(), e);\n            throw e;\n        }"
+            },
+            {
+              "name": "getPodsFromDb",
+              "return_type": "PodResponseDto",
+              "parameters": [
+                {
+                  "name": "namespace",
+                  "type": "String"
+                }
+              ],
+              "documentation": "/**\n     * DB에서 특정 네임스페이스의 Pod 정보 조회\n     * @param namespace 조회할 네임스페이스\n     * @return PodResponseDto Pod 정보 목록을 포함한 응답 객체\n     */",
+              "description": "`getPodsFromDb` 메서드는 주어진 네임스페이스에 해당하는 Pod 정보를 데이터베이스에서 조회하여, 이를 `PodResponseDto` 객체로 반환합니다.",
+              "body": "try {\n            logger.debug(\"Retrieving pod info from DB for namespace: {}\", namespace);\n            \n            List<PodInfoEntity> podEntities = podInfoRepository.findByNamespace(namespace);\n            \n            List<PodInfoDto> podInfos = podEntities.stream()\n                .map(entity -> new PodInfoDto(\n                    entity.getNamespace(),\n                    entity.getPodName(),\n                    entity.getPodStatus(),\n                    entity.getPodUptime(),\n                    entity.getGpuDevices(),\n                    entity.getUsername()\n                ))\n                .collect(Collectors.toList());\n            \n            logger.debug(\"Retrieved {} pod records from DB for namespace: {}\", podInfos.size(), namespace);\n            return new PodResponseDto(podInfos);\n        } catch (Exception e) {\n            logger.error(\"Failed to retrieve pod info from DB for namespace '{}': {}\", namespace, e.getMessage(), e);\n            return new PodResponseDto(Collections.emptyList());\n        }"
+            },
+            {
+              "name": "deletePod",
+              "return_type": "DeletePodResponseDto",
+              "parameters": [
+                {
+                  "name": "namespace",
+                  "type": "String"
+                },
+                {
+                  "name": "podName",
+                  "type": "String"
+                }
+              ],
+              "documentation": "/**\n     * 특정 Pod 삭제\n     * @param namespace 조회할 pod 네임스페이스\n     * @param podName 삭제할 Pod 이름\n     * @return DeletePodResponseDto 삭제 결과를 포함한 응답 객체\n     */",
+              "description": "`deletePod` 메서드는 지정된 네임스페이스와 이름을 가진 Kubernetes Pod를 삭제하고, 삭제 결과를 데이터베이스에 업데이트한 후, 성공 또는 실패 여부를 포함한 응답 객체를 반환합니다.",
+              "body": "try {\n            logger.debug(\"Pod 삭제 시도 - namespace: {}, podName: {}\", namespace, podName);\n            \n            coreV1Api.deleteNamespacedPod(\n                podName,\n                namespace,\n                null,  // pretty\n                null,  // dryRun\n                30,  // gracePeriodSeconds\n                null,  // orphanDependents\n                \"Background\",  // propagationPolicy\n                null   // body\n            );\n            \n            // DB에서 Pod 상태 업데이트\n            updatePodStatusInDb(namespace, podName, \"Deleted\");\n\n\n            logger.info(\"Pod 삭제 완료\");\n            return new DeletePodResponseDto(\"success\");\n            \n        } catch (Exception e) {\n            logger.error(\"Pod 삭제 실패 - namespace: {}, podName: {}, error: {}\", \n                namespace, podName, e.getMessage());\n            return new DeletePodResponseDto(\"fail\");\n        }"
+            },
+            {
+              "name": "updatePodStatusInDb",
+              "return_type": null,
+              "parameters": [
+                {
+                  "name": "namespace",
+                  "type": "String"
+                },
+                {
+                  "name": "podName",
+                  "type": "String"
+                },
+                {
+                  "name": "status",
+                  "type": "String"
+                }
+              ],
+              "documentation": "/**\n     * DB에서 Pod 상태 업데이트\n     * @param namespace 네임스페이스\n     * @param podName Pod 이름\n     * @param status 새 상태\n     */",
+              "description": "`updatePodStatusInDb` 메서드는 주어진 네임스페이스와 Pod 이름에 해당하는 Pod의 상태를 데이터베이스에서 조회하여 새로운 상태로 업데이트합니다.",
+              "body": "try {\n            // DB에서 Pod 정보 조회\n            List<PodInfoEntity> existingPods = podInfoRepository.findByNamespace(namespace);\n            \n            for (PodInfoEntity pod : existingPods) {\n                if (pod.getPodName().equals(podName)) {\n                    pod.setPodStatus(status);\n                    podInfoRepository.save(pod);\n                    logger.debug(\"Pod 상태 업데이트: {}/{} -> {}\", namespace, podName, status);\n                    break;\n                }\n            }\n        } catch (Exception e) {\n            logger.error(\"Pod 상태 업데이트 실패: {}/{} -> {}, error: {}\", \n                namespace, podName, status, e.getMessage());\n        }"
+            },
+            {
+              "name": "updateUsername",
+              "return_type": "PodResponseDto",
+              "parameters": [
+                {
+                  "name": "namespace",
+                  "type": "String"
+                },
+                {
+                  "name": "podName",
+                  "type": "String"
+                },
+                {
+                  "name": "username",
+                  "type": "String"
+                }
+              ],
+              "documentation": null,
+              "description": "`updateUsername` 메서드는 주어진 네임스페이스와 포드 이름에 해당하는 포드의 사용자 이름을 업데이트하고, 업데이트가 실패할 경우 오류를 로깅합니다.",
+              "body": "try {\n            logger.debug(\"Pod 사용자 이름 업데이트 시도 - namespace: {}, podName: {}, username: {}\", namespace, podName, username);\n            \n            Optional<PodInfoEntity> pod = podInfoRepository.findByNamespaceAndPodName(namespace, podName);\n            if (pod.isPresent()) {\n                pod.get().setUsername(username);\n                podInfoRepository.save(pod.get());\n            }\n        } catch (Exception e) {\n            logger.error(\"Pod 사용자 이름 업데이트 실패: {}/{} -> {}, error: {}\", \n                namespace, podName, username, e.getMessage());\n        }\n        return new PodResponseDto(Collections.emptyList());"
+            }
+          ],
+          "fields": [
+            {
+              "name": "logger",
+              "type": "Logger"
+            },
+            {
+              "name": "coreV1Api",
+              "type": "CoreV1Api"
+            },
+            {
+              "name": "podInfoRepository",
+              "type": "PodInfoRepository"
+            }
+          ]
+        }
+      ],
+      "interfaces": [],
+      "path": "C:/Users/kimtaehyeong/workspace/gpu_pod_dashboard\\src\\main\\java\\com\\example\\gpu_dashboard\\service\\PodService.java",
+      "dependencies": [
+        {
+          "type": "import",
+          "target": "com.example.gpu_dashboard.dto.DeletePodResponseDto",
+          "file": "src\\main\\java\\com\\example\\gpu_dashboard\\dto\\DeletePodResponseDto.java"
+        },
+        {
+          "type": "import",
+          "target": "com.example.gpu_dashboard.dto.PodInfoDto",
+          "file": "src\\main\\java\\com\\example\\gpu_dashboard\\dto\\PodInfoDto.java"
+        },
+        {
+          "type": "import",
+          "target": "com.example.gpu_dashboard.dto.PodResponseDto",
+          "file": "src\\main\\java\\com\\example\\gpu_dashboard\\dto\\PodResponseDto.java"
+        },
+        {
+          "type": "import",
+          "target": "com.example.gpu_dashboard.repository.PodInfoRepository",
+          "file": "src\\main\\java\\com\\example\\gpu_dashboard\\repository\\PodInfoRepository.java"
+        },
+        {
+          "type": "import",
+          "target": "com.example.gpu_dashboard.entity.PodInfoEntity",
+          "file": "src\\main\\java\\com\\example\\gpu_dashboard\\entity\\PodInfoEntity.java"
+        }
+      ]
+    }
+  }
+}
